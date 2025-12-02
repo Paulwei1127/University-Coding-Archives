@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <style>
+    html,
+    body {
+      height: 100%;
+    }
+
+    body {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+  </style>
+</head>
+
+<body>
+  <canvas id="canvas" width="1000" height="800"></canvas>
+  <div id="uiContainer">
+    <div id="ui">
+      <div id="x"></div>
+      <div id="y"></div>
+      <div id="angle"></div>
+      <div id="scaleX"></div>
+      <div id="scaleY"></div>
+      <div id="Layer"></div>
+      <div id="Colorful"></div>
+    </div>
+  </div>
+</body>
+
+<script src="https://webgl2fundamentals.org/webgl/resources/webgl-utils.js"></script>
+<script src="https://webgl2fundamentals.org/webgl/resources/webgl-lessons-ui.js"></script>
+<script src="https://webgl2fundamentals.org/webgl/resources/m3.js"></script>
+<script type="text/javascript">
+
+// WebGL2 - Triangle with position for color
+// from https://webgl2fundamentals.org/webgl/webgl-2d-triangle-with-position-for-color.html
+
+
+
+"use strict";
+
+var vs = `#version 300 es
+in vec2 a_position;
+
+uniform mat3 u_matrix;
+
+//uniform vec4 v_color;
+
+void main() {
+  // Multiply the position by the matrix.
+  gl_Position = vec4((u_matrix * vec3(a_position, 1)).xy, 0, 1);
+
+  // Convert from clipspace to colorspace.
+  // Clipspace goes -1.0 to +1.0
+  // Colorspace goes from 0.0 to 1.0
+  ///v_color = gl_Position * 0.5 + 0.5;
+}
+`;
+
+var fs = `#version 300 es
+
+precision highp float;
+
+uniform vec4 v_color;
+
+out vec4 outColor;
+
+void main() {
+  outColor = v_color;
+}
+`;
+
+function main() {
+  // Get A WebGL context
+  /** @type {HTMLCanvasElement} */
+  var canvas = document.querySelector("#canvas");
+  var gl = canvas.getContext("webgl2");
+  if (!gl) {
+    return;
+  }
+
+  // setup GLSL program
+  var program = webglUtils.createProgramFromSources(gl, [vs, fs]);
+
+  // look up where the vertex data needs to go.
+  var positionLocation = gl.getAttribLocation(program, "a_position");
+
+  // lookup uniforms
+  var matrixLocation = gl.getUniformLocation(program, "u_matrix");
+
+  var colorLocation = gl.getUniformLocation(program, "v_color");
+
+  // Create set of attributes
+  var vao = gl.createVertexArray();
+  gl.bindVertexArray(vao);
+
+  // Create a buffer.
+  var buffer = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+
+
+
+  // tell the position attribute how to pull data out of the current ARRAY_BUFFER
+  gl.enableVertexAttribArray(positionLocation);
+  var size = 2;
+  var type = gl.FLOAT;
+  var normalize = false;
+  var stride = 0;
+  var offset = 0;
+  gl.vertexAttribPointer(positionLocation, size, type, normalize, stride, offset);
+
+  var translation = [10, 100];
+  var angleInRadians = 0;
+  var scale = [1, 1];
+  var layer = 0;//層數從0開始 也就是一個三角形
+  var colorcheck = 0;//控制顏色 0表黑白 1表隨機彩色
+
+  drawScene(layer, colorcheck);//畫出一開始layer=0時的三角形
+
+  // Setup a ui.
+  webglLessonsUI.setupSlider("#x",      {value: translation[0], slide: updatePosition(0), max: gl.canvas.width });
+  webglLessonsUI.setupSlider("#y",      {value: translation[1], slide: updatePosition(1), max: gl.canvas.height});
+  webglLessonsUI.setupSlider("#angle",  {slide: updateAngle, max: 360});
+  webglLessonsUI.setupSlider("#scaleX", {value: scale[0], slide: updateScale(0), min: -5, max: 5, step: 0.01, precision: 2});
+  webglLessonsUI.setupSlider("#scaleY", {value: scale[1], slide: updateScale(1), min: -5, max: 5, step: 0.01, precision: 2});
+  webglLessonsUI.setupSlider("#Layer", {value: layer, slide: updateLayer(1), min: 0, max: 9, step: 1, precision: 1});//新增控制層數的滑軌
+  webglLessonsUI.setupSlider("#Colorful", {value: colorcheck, slide: updateColor(1), min: 0, max: 1, step: 1, precision: 1});//控制顏色的滑軌
+
+  function updatePosition(index) {
+      return function(event, ui) {
+        translation[index] = ui.value;
+        drawScene(layer, colorcheck);
+      };
+    }
+
+  function updateAngle(event, ui) {
+    var angleInDegrees = 360 - ui.value;
+    angleInRadians = angleInDegrees * Math.PI / 180;
+    drawScene(layer, colorcheck);
+  }
+
+  function updateScale(index) {
+    return function(event, ui) {
+      scale[index] = ui.value;
+      drawScene(layer, colorcheck);
+    };
+  }
+
+
+  function updateLayer(index) {//控制層數的function
+    return function(event, ui) {
+      layer = ui.value;
+      drawScene(layer, colorcheck);
+    };
+  }
+
+  function updateColor(index) {//控制顏色
+    return function(event, ui) {
+      colorcheck = ui.value;
+      drawScene(layer , colorcheck);
+    };
+  }
+
+  // Draw the scene.
+  function drawScene(index, colorcheck) {
+    webglUtils.resizeCanvasToDisplaySize(gl.canvas);
+
+    gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
+
+    // Clear the canvas
+    gl.clearColor(0, 0, 0, 0);
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+    // Compute the matrix
+    var matrix = m3.projection(gl.canvas.clientWidth, gl.canvas.clientHeight);
+    matrix = m3.translate(matrix, translation[0], translation[1]);
+    matrix = m3.rotate(matrix, angleInRadians);
+    matrix = m3.scale(matrix, scale[0], scale[1]);
+
+    // Tell it to use our program (pair of shaders)
+    gl.useProgram(program);
+
+    // Bind the attribute/buffer set we want.
+    gl.bindVertexArray(vao);
+
+    // Set the matrix.
+    gl.uniformMatrix3fv(matrixLocation, false, matrix);
+
+    //第一個三角形三點的初始位置
+      var x1 = 0;
+      var y1 = 400;
+      var x2 = 600;
+      var y2 = 400;
+      var x3 = 300;
+      var y3 = 0;
+
+      draww(x1 ,y1 ,x2 ,y2 ,x3 ,y3 ,index, colorcheck);//呼叫draww作畫
+  }
+
+  function draww(a1 ,b1 ,a2 ,b2,a3 ,b3, layer, colorcheck){//畫三角形的recursive
+    var x1 = a1;
+    var y1 = b1;
+    var x2 = a2;
+    var y2 = b2;
+    var x3 = a3;
+    var y3 = b3;
+
+    //colorcheck=0 為黑色
+    if(colorcheck == 0){
+        if(layer!=0)gl.uniform4f(colorLocation, 0, 0, 0, 0 );
+        else gl.uniform4f(colorLocation, 0, 0, 0, 1 );
+    }
+    else gl.uniform4f(colorLocation, Math.random(), Math.random(), Math.random(), 1);//否則隨機顏色
+
+    //畫出三角形
+    setGeometry_3(gl ,x1 ,y1 , x2 , y2 ,x3 ,y3);
+    var offset = 0;
+    var count = 3;
+    gl.drawArrays(gl.TRIANGLES, offset, count);
+
+    if(layer == 0) return;
+        else{
+          //找到三角形三邊的中點，與各頂點形成小三角形再次呼叫直到layer=0
+          var dx = getmidpoint(x1 ,x2);
+          var dy = getmidpoint(y1 ,y2);
+          var ex = getmidpoint(x2 ,x3);
+          var ey = getmidpoint(y2 ,y3);
+          var fx = getmidpoint(x3 ,x1);
+          var fy = getmidpoint(y3 ,y1);
+          draww(x1 ,y1 ,dx ,dy ,fx ,fy ,layer-1, colorcheck);
+          draww(dx ,dy ,x2 ,y2 ,ex ,ey ,layer-1, colorcheck);
+          draww(fx ,fy ,ex ,ey ,x3 ,y3 ,layer-1, colorcheck);
+        }
+  }
+
+}
+
+
+function setGeometry_3(gl ,x1 ,y1 ,x2 ,y2,x3 ,y3 ) {
+  gl.bufferData(
+      gl.ARRAY_BUFFER,
+      new Float32Array([
+            x1 , y1,
+            x2 , y2,
+            x3 , y3,
+      ]),
+      gl.STATIC_DRAW);
+}
+
+function getmidpoint(t1 ,t2) {//找中點座標
+  var t3 = (t1 + t2) / 2;
+  return t3;
+}
+
+main();
+
+</script>
+
+</html>
